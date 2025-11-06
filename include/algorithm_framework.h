@@ -8,9 +8,12 @@
 #include <any>
 #include <chrono>
 #include <concepts>
+#include <shared_mutex>
+#include <optional>
+#include <queue>
 
-#include "l1_to_l2.pb.h"
-#include "l2_to_l1.pb.h"
+#include "messages/l1_to_l2.pb.h"
+#include "messages/l2_to_l1.pb.h"
 
 namespace dp_aero_l2::fusion {
 
@@ -295,18 +298,21 @@ public:
  */
 class AlgorithmRegistry {
 private:
+    mutable std::shared_mutex mutex_;
     std::unordered_map<std::string, std::unique_ptr<AlgorithmFactory>> factories_;
     
 public:
     template<typename AlgorithmType>
     requires std::derived_from<AlgorithmType, FusionAlgorithm>
     void register_algorithm() {
+        std::unique_lock lock(mutex_);
         auto factory = std::make_unique<TypedAlgorithmFactory<AlgorithmType>>();
         auto name = factory->get_algorithm_name();
         factories_[name] = std::move(factory);
     }
     
     std::unique_ptr<FusionAlgorithm> create_algorithm(const std::string& name) const {
+        std::shared_lock lock(mutex_);
         auto it = factories_.find(name);
         if (it != factories_.end()) {
             return it->second->create_algorithm();
@@ -315,6 +321,7 @@ public:
     }
     
     std::vector<std::string> get_available_algorithms() const {
+        std::shared_lock lock(mutex_);
         std::vector<std::string> names;
         for (const auto& [name, factory] : factories_) {
             names.push_back(name);
@@ -323,6 +330,7 @@ public:
     }
     
     bool is_algorithm_available(const std::string& name) const {
+        std::shared_lock lock(mutex_);
         return factories_.find(name) != factories_.end();
     }
 };

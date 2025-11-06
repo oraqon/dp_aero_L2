@@ -5,6 +5,7 @@
 #include <thread>
 #include <atomic>
 #include <mutex>
+#include <shared_mutex>
 #include <condition_variable>
 #include <queue>
 #include <unordered_set>
@@ -112,6 +113,35 @@ public:
         last_seen_.erase(node_id);
         node_status_.erase(node_id);
     }
+    
+    /**
+     * @brief Atomically check and remove timed-out nodes
+     * @param timeout Timeout duration
+     * @return List of node IDs that were actually removed
+     */
+    std::vector<std::string> check_and_remove_timed_out_nodes(std::chrono::seconds timeout) {
+        std::unique_lock lock(mutex_);
+        std::vector<std::string> removed_nodes;
+        auto now = std::chrono::steady_clock::now();
+        
+        // Find timed-out nodes
+        auto it = last_seen_.begin();
+        while (it != last_seen_.end()) {
+            if (now - it->second >= timeout) {
+                const std::string& node_id = it->first;
+                removed_nodes.push_back(node_id);
+                
+                // Remove from all maps
+                nodes_.erase(node_id);
+                node_status_.erase(node_id);
+                it = last_seen_.erase(it);  // erase returns next iterator
+            } else {
+                ++it;
+            }
+        }
+        
+        return removed_nodes;
+    }
 };
 
 /**
@@ -127,19 +157,26 @@ private:
     
     // Threading
     std::atomic<bool> running_{false};
+    std::atomic<bool> subscription_running_{false};
     std::vector<std::thread> worker_threads_;
     std::thread algorithm_thread_;
     std::thread heartbeat_thread_;
     std::thread node_monitor_thread_;
+    std::thread subscription_thread_;
     
     // Message queue
     std::queue<messages::L1ToL2Message> message_queue_;
     mutable std::mutex queue_mutex_;
     std::condition_variable queue_cv_;
     
+    // Algorithm synchronization
+    mutable std::shared_mutex algorithm_mutex_;
+    mutable std::mutex context_mutex_;
+    
     // Statistics
     std::atomic<uint64_t> messages_processed_{0};
     std::atomic<uint64_t> messages_sent_{0};
+    std::atomic<uint64_t> message_counter_{0};  // Instance-specific message counter
     std::chrono::steady_clock::time_point start_time_;
     
 public:
@@ -159,6 +196,7 @@ public:
         if (running_) {
             throw std::runtime_error("Cannot change algorithm while system is running");
         }
+        std::unique_lock algorithm_lock(algorithm_mutex_);
         algorithm_ = std::move(algorithm);
     }
     
@@ -177,7 +215,11 @@ public:
         running_ = true;
         
         // Initialize algorithm
-        algorithm_->initialize(algorithm_context_);
+        {
+            std::unique_lock algorithm_lock(algorithm_mutex_);
+            std::lock_guard<std::mutex> context_lock(context_mutex_);
+            algorithm_->initialize(algorithm_context_);
+        }
         
         // Start worker threads
         for (size_t i = 0; i < config_.worker_threads; ++i) {
@@ -208,6 +250,7 @@ public:
         }
         
         running_ = false;
+        subscription_running_ = false;
         queue_cv_.notify_all();
         
         // Wait for all threads to complete
@@ -229,9 +272,17 @@ public:
             node_monitor_thread_.join();
         }
         
+        if (subscription_thread_.joinable()) {
+            subscription_thread_.join();
+        }
+        
         // Shutdown algorithm
-        if (algorithm_) {
-            algorithm_->shutdown(algorithm_context_);
+        {
+            std::unique_lock algorithm_lock(algorithm_mutex_);
+            std::lock_guard<std::mutex> context_lock(context_mutex_);
+            if (algorithm_) {
+                algorithm_->shutdown(algorithm_context_);
+            }
         }
         
         log_info("L2 Fusion Manager stopped");
@@ -267,12 +318,18 @@ public:
         auto now = std::chrono::steady_clock::now();
         auto uptime = std::chrono::duration_cast<std::chrono::seconds>(now - start_time_);
         
+        std::string current_state;
+        {
+            std::lock_guard<std::mutex> context_lock(context_mutex_);
+            current_state = algorithm_context_.current_state_name;
+        }
+        
         return SystemStats{
             .messages_processed = messages_processed_.load(),
             .messages_sent = messages_sent_.load(),
             .active_nodes = node_registry_.get_active_nodes(config_.node_timeout).size(),
             .uptime = uptime,
-            .current_algorithm_state = algorithm_context_.current_state_name
+            .current_algorithm_state = current_state
         };
     }
     
@@ -287,6 +344,8 @@ public:
      * @brief Trigger external event in algorithm
      */
     void trigger_algorithm_event(const std::string& trigger_name, const std::any& data = {}) {
+        std::shared_lock algorithm_lock(algorithm_mutex_);
+        std::lock_guard<std::mutex> context_lock(context_mutex_);
         if (algorithm_) {
             algorithm_->handle_trigger(algorithm_context_, trigger_name, data);
         }
@@ -294,16 +353,37 @@ public:
 
 private:
     void start_redis_subscription() {
-        // Subscribe to L1 to L2 messages
-        std::thread subscription_thread([this]() {
-            redis_messenger_->subscribe<messages::L1ToL2Message>(
-                config_.l1_to_l2_topic,
-                [this](const messages::L1ToL2Message& message) {
-                    handle_l1_message(message);
+        subscription_running_ = true;
+        subscription_thread_ = std::thread([this]() {
+            try {
+                auto subscriber = redis_messenger_->get_subscriber();
+                subscriber.on_message([this](std::string channel, std::string msg) {
+                    if (!subscription_running_) return;  // Check flag before processing
+                    try {
+                        auto message = redis_messenger_->template deserialize_message<messages::L1ToL2Message>(msg);
+                        handle_l1_message(message);
+                    } catch (const std::exception& e) {
+                        log_error("Message processing error: " + std::string(e.what()));
+                    }
+                });
+                
+                subscriber.subscribe(config_.l1_to_l2_topic);
+                while (subscription_running_) {
+                    try {
+                        subscriber.consume();
+                    } catch (const sw::redis::Error& e) {
+                        if (subscription_running_) {
+                            log_error("Redis subscription error: " + std::string(e.what()));
+                            std::this_thread::sleep_for(std::chrono::seconds(1));  // Brief pause before retry
+                        }
+                        break;
+                    }
                 }
-            );
+            } catch (const std::exception& e) {
+                log_error("Redis subscription thread error: " + std::string(e.what()));
+            }
+            log_info("Redis subscription thread stopped");
         });
-        subscription_thread.detach();
     }
     
     void handle_l1_message(const messages::L1ToL2Message& message) {
@@ -357,22 +437,32 @@ private:
             
             // Process message with algorithm
             try {
-                algorithm_->process_l1_message(algorithm_context_, message);
-                messages_processed_++;
-                
-                // Send any pending output messages
-                send_pending_outputs();
-                
+                std::shared_lock algorithm_lock(algorithm_mutex_);
+                std::lock_guard<std::mutex> context_lock(context_mutex_);
+                if (algorithm_) {
+                    algorithm_->process_l1_message(algorithm_context_, message);
+                    messages_processed_++;
+                }
             } catch (const std::exception& e) {
                 log_error("Algorithm processing error: " + std::string(e.what()));
             }
+            
+            // Send any pending output messages (outside the lock)
+            send_pending_outputs();
         }
     }
     
     void algorithm_thread_func() {
         while (running_) {
             try {
-                algorithm_->update(algorithm_context_);
+                {
+                    std::shared_lock algorithm_lock(algorithm_mutex_);
+                    std::lock_guard<std::mutex> context_lock(context_mutex_);
+                    if (algorithm_) {
+                        algorithm_->update(algorithm_context_);
+                    }
+                }
+                // Send any pending output messages (outside the lock)
                 send_pending_outputs();
             } catch (const std::exception& e) {
                 log_error("Algorithm update error: " + std::string(e.what()));
@@ -391,12 +481,19 @@ private:
     
     void node_monitor_thread_func() {
         while (running_) {
-            auto timed_out_nodes = node_registry_.get_timed_out_nodes(config_.node_timeout);
+            // Atomically check and remove timed-out nodes
+            auto removed_nodes = node_registry_.check_and_remove_timed_out_nodes(config_.node_timeout);
             
-            for (const auto& node_id : timed_out_nodes) {
+            // Process each removed node
+            for (const auto& node_id : removed_nodes) {
                 log_warning("Node timeout detected: " + node_id);
-                algorithm_->handle_trigger(algorithm_context_, "node_timeout", node_id);
-                node_registry_.remove_node(node_id);
+                {
+                    std::shared_lock algorithm_lock(algorithm_mutex_);
+                    std::lock_guard<std::mutex> context_lock(context_mutex_);
+                    if (algorithm_) {
+                        algorithm_->handle_trigger(algorithm_context_, "node_timeout", node_id);
+                    }
+                }
             }
             
             std::this_thread::sleep_for(config_.node_timeout / 4);
@@ -404,10 +501,16 @@ private:
     }
     
     void send_pending_outputs() {
-        for (const auto& message : algorithm_context_.pending_outputs) {
+        std::vector<messages::L2ToL1Message> messages_to_send;
+        {
+            std::lock_guard<std::mutex> context_lock(context_mutex_);
+            messages_to_send = std::move(algorithm_context_.pending_outputs);
+            algorithm_context_.pending_outputs.clear();
+        }
+        
+        for (const auto& message : messages_to_send) {
             send_to_l1(message);
         }
-        algorithm_context_.pending_outputs.clear();
     }
     
     void send_heartbeat() {
@@ -429,8 +532,7 @@ private:
     }
     
     std::string generate_message_id() {
-        static std::atomic<uint64_t> counter{0};
-        return "L2_" + std::to_string(counter++);
+        return "L2_" + std::to_string(message_counter_++);
     }
     
     void log_debug(const std::string& message) {

@@ -39,3 +39,23 @@
 
 # debug information files
 *.dwo
+
+# Build directories
+build/
+cmake-build-*/
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Generated protobuf files
+*.pb.h
+*.pb.cc
+
+# Redis data
+dump.rdb
+
+# Logs
+*.log

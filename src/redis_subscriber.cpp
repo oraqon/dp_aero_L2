@@ -1,6 +1,6 @@
 #include "redis_utils.h"
-#include "gimbal_position.pb.h"
-#include "timestamp.pb.h"
+#include "common/gimbal_position.pb.h"
+#include "common/timestamp.pb.h"
 #include <iostream>
 #include <thread>
 #include <signal.h>

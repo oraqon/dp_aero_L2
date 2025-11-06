@@ -45,6 +45,7 @@ private:
     };
     
     Parameters params_;
+    std::chrono::steady_clock::time_point last_status_time_{};  // Instance-specific timing
     
 public:
     std::string get_name() const override {
@@ -465,15 +466,15 @@ private:
     
     void send_status_updates(fusion::AlgorithmContext& context) {
         // Send periodic status updates to L1 nodes
-        static auto last_status_time = std::chrono::steady_clock::now();
         auto now = std::chrono::steady_clock::now();
         
-        if (now - last_status_time > std::chrono::seconds(5)) {
+        if (last_status_time_ == std::chrono::steady_clock::time_point{} || 
+            now - last_status_time_ > std::chrono::seconds(5)) {
             auto targets_opt = context.get_data<std::unordered_map<std::string, Target>>("targets");
             if (targets_opt) {
                 send_fusion_results(context, *targets_opt);
             }
-            last_status_time = now;
+            last_status_time_ = now;
         }
     }
     

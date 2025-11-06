@@ -1,6 +1,6 @@
 #include "redis_utils.h"
-#include "l1_to_l2.pb.h"
-#include "l2_to_l1.pb.h"
+#include "messages/l1_to_l2.pb.h"
+#include "messages/l2_to_l1.pb.h"
 #include <iostream>
 #include <thread>
 #include <random>

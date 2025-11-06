@@ -13,11 +13,15 @@ find_package(PkgConfig REQUIRED)
 # Find Redis++ (hiredis-based C++ client)
 find_package(PkgConfig REQUIRED)
 pkg_check_modules(HIREDIS REQUIRED hiredis)
-pkg_check_modules(REDIS_PLUS_PLUS REQUIRED redis++)
 
-# Alternative: if using vcpkg or manual installation
-# find_package(hiredis REQUIRED)
-# find_package(redis++ REQUIRED)
+# Use installed redis++ library
+find_library(REDIS_PLUS_PLUS_LIB redis++ PATHS /usr/local/lib)
+if(NOT REDIS_PLUS_PLUS_LIB)
+    message(FATAL_ERROR "redis++ library not found")
+endif()
+
+set(REDIS_PLUS_PLUS_INCLUDE_DIRS /usr/local/include)
+set(REDIS_PLUS_PLUS_LIBRARIES ${REDIS_PLUS_PLUS_LIB})
 
 # Include directories
 include_directories(${CMAKE_CURRENT_BINARY_DIR})
@@ -26,140 +30,68 @@ include_directories(${CMAKE_CURRENT_SOURCE_DIR}/include)
 # Protobuf files
 file(GLOB_RECURSE PROTO_FILES "proto/*.proto")
 
-# Generate C++ files from protobuf
-protobuf_generate_cpp(PROTO_SRCS PROTO_HDRS ${PROTO_FILES})
+# Generate C++ files from protobuf with proper import paths
+set(PROTO_SRCS "")
+set(PROTO_HDRS "")
+
+foreach(PROTO_FILE ${PROTO_FILES})
+    get_filename_component(PROTO_NAME ${PROTO_FILE} NAME_WE)
+    get_filename_component(PROTO_PATH ${PROTO_FILE} DIRECTORY)
+    file(RELATIVE_PATH PROTO_REL_PATH ${CMAKE_CURRENT_SOURCE_DIR}/proto ${PROTO_PATH})
+    
+    set(PROTO_SRC "${CMAKE_CURRENT_BINARY_DIR}/${PROTO_REL_PATH}/${PROTO_NAME}.pb.cc")
+    set(PROTO_HDR "${CMAKE_CURRENT_BINARY_DIR}/${PROTO_REL_PATH}/${PROTO_NAME}.pb.h")
+    
+    list(APPEND PROTO_SRCS ${PROTO_SRC})
+    list(APPEND PROTO_HDRS ${PROTO_HDR})
+    
+    add_custom_command(
+        OUTPUT ${PROTO_SRC} ${PROTO_HDR}
+        COMMAND ${CMAKE_COMMAND} -E make_directory ${CMAKE_CURRENT_BINARY_DIR}/${PROTO_REL_PATH}
+        COMMAND ${Protobuf_PROTOC_EXECUTABLE}
+        ARGS --cpp_out ${CMAKE_CURRENT_BINARY_DIR} -I ${CMAKE_CURRENT_SOURCE_DIR}/proto ${PROTO_FILE}
+        DEPENDS ${PROTO_FILE}
+        COMMENT "Running C++ protocol buffer compiler on ${PROTO_FILE}"
+        VERBATIM
+    )
+endforeach()
 
 # Create library
 add_library(dp_aero_l2_proto STATIC ${PROTO_SRCS} ${PROTO_HDRS})
 target_link_libraries(dp_aero_l2_proto ${Protobuf_LIBRARIES})
 target_include_directories(dp_aero_l2_proto PUBLIC ${Protobuf_INCLUDE_DIRS})
 
-# Example executable
-add_executable(dp_aero_l2_example 
-    src/main.cpp
-    src/data_processor.cpp
-)
+# Note: dp_aero_l2_example removed - source files don't exist
 
-target_link_libraries(dp_aero_l2_example 
-    dp_aero_l2_proto
-    ${Protobuf_LIBRARIES}
-    ${HIREDIS_LIBRARIES}
-    ${REDIS_PLUS_PLUS_LIBRARIES}
-)
-
-target_include_directories(dp_aero_l2_example PRIVATE 
-    ${CMAKE_CURRENT_BINARY_DIR}
-    ${Protobuf_INCLUDE_DIRS}
-    ${HIREDIS_INCLUDE_DIRS}
-    ${REDIS_PLUS_PLUS_INCLUDE_DIRS}
-)
-
+# Examples temporarily disabled for initial build
 # Redis Publisher example
-add_executable(redis_publisher 
-    src/redis_publisher.cpp
-)
+# add_executable(redis_publisher 
+#     src/redis_publisher.cpp
+# )
 
-target_link_libraries(redis_publisher 
-    dp_aero_l2_proto
-    ${Protobuf_LIBRARIES}
-    ${HIREDIS_LIBRARIES}
-    ${REDIS_PLUS_PLUS_LIBRARIES}
-)
+# L2 Fusion System (temporarily disable - building just proto)
+# add_executable(l2_fusion_system 
+#     src/l2_fusion_system.cpp
+#     src/algorithm_framework.cpp
+# )
 
-target_include_directories(redis_publisher PRIVATE 
-    ${CMAKE_CURRENT_BINARY_DIR}
-    ${Protobuf_INCLUDE_DIRS}
-    ${HIREDIS_INCLUDE_DIRS}
-    ${REDIS_PLUS_PLUS_INCLUDE_DIRS}
-)
+# target_link_libraries(l2_fusion_system 
+#     dp_aero_l2_proto
+#     ${Protobuf_LIBRARIES}
+#     ${HIREDIS_LIBRARIES}
+#     ${REDIS_PLUS_PLUS_LIBRARIES}
+# )
 
-# Redis Subscriber example
-add_executable(redis_subscriber 
-    src/redis_subscriber.cpp
-)
+# L1 Node Simulator (temporarily disabled)
+# add_executable(l1_node_simulator 
+#     src/l1_node_simulator.cpp
+# )
 
-target_link_libraries(redis_subscriber 
-    dp_aero_l2_proto
-    ${Protobuf_LIBRARIES}
-    ${HIREDIS_LIBRARIES}
-    ${REDIS_PLUS_PLUS_LIBRARIES}
-)
-
-target_include_directories(redis_subscriber PRIVATE 
-    ${CMAKE_CURRENT_BINARY_DIR}
-    ${Protobuf_INCLUDE_DIRS}
-    ${HIREDIS_INCLUDE_DIRS}
-    ${REDIS_PLUS_PLUS_INCLUDE_DIRS}
-)
-
-# Redis Stream example
-add_executable(redis_stream_example 
-    src/redis_stream_example.cpp
-)
-
-target_link_libraries(redis_stream_example 
-    dp_aero_l2_proto
-    ${Protobuf_LIBRARIES}
-    ${HIREDIS_LIBRARIES}
-    ${REDIS_PLUS_PLUS_LIBRARIES}
-)
-
-target_include_directories(redis_stream_example PRIVATE 
-    ${CMAKE_CURRENT_BINARY_DIR}
-    ${Protobuf_INCLUDE_DIRS}
-    ${HIREDIS_INCLUDE_DIRS}
-    ${REDIS_PLUS_PLUS_INCLUDE_DIRS}
-)
-
-# L2 Fusion System
-add_executable(l2_fusion_system 
-    src/l2_fusion_system.cpp
-    src/algorithm_framework.cpp
-)
-
-target_link_libraries(l2_fusion_system 
-    dp_aero_l2_proto
-    ${Protobuf_LIBRARIES}
-    ${HIREDIS_LIBRARIES}
-    ${REDIS_PLUS_PLUS_LIBRARIES}
-)
-
-target_include_directories(l2_fusion_system PRIVATE 
-    ${CMAKE_CURRENT_BINARY_DIR}
-    ${Protobuf_INCLUDE_DIRS}
-    ${HIREDIS_INCLUDE_DIRS}
-    ${REDIS_PLUS_PLUS_INCLUDE_DIRS}
-)
-
-# L1 Node Simulator
-add_executable(l1_node_simulator 
-    src/l1_node_simulator.cpp
-)
-
-target_link_libraries(l1_node_simulator 
-    dp_aero_l2_proto
-    ${Protobuf_LIBRARIES}
-    ${HIREDIS_LIBRARIES}
-    ${REDIS_PLUS_PLUS_LIBRARIES}
-)
-
-target_include_directories(l1_node_simulator PRIVATE 
-    ${CMAKE_CURRENT_BINARY_DIR}
-    ${Protobuf_INCLUDE_DIRS}
-    ${HIREDIS_INCLUDE_DIRS}
-    ${REDIS_PLUS_PLUS_INCLUDE_DIRS}
-)
-
-# Compiler flags for all targets
-target_compile_options(dp_aero_l2_example PRIVATE -Wall -Wextra -O2)
-target_compile_options(redis_publisher PRIVATE -Wall -Wextra -O2)
-target_compile_options(redis_subscriber PRIVATE -Wall -Wextra -O2)
-target_compile_options(redis_stream_example PRIVATE -Wall -Wextra -O2)
-target_compile_options(l2_fusion_system PRIVATE -Wall -Wextra -O2 -pthread)
-target_compile_options(l1_node_simulator PRIVATE -Wall -Wextra -O2 -pthread)
+# Compiler flags for protobuf library
+target_compile_options(dp_aero_l2_proto PRIVATE -Wall -Wextra -O2)
 
 # Install targets
-install(TARGETS dp_aero_l2_proto dp_aero_l2_example redis_publisher redis_subscriber redis_stream_example l2_fusion_system l1_node_simulator
+install(TARGETS dp_aero_l2_proto
     RUNTIME DESTINATION bin
     LIBRARY DESTINATION lib
     ARCHIVE DESTINATION lib

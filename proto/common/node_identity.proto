@@ -2,7 +2,7 @@ syntax = "proto3";
 
 package dp_aero_l2.common;
 
-import "timestamp.proto";
+import "common/timestamp.proto";
 
 // Node identification and metadata
 message NodeIdentity {
@@ -24,7 +24,7 @@ message NodeStatus {
   
   string node_id = 1;
   Status status = 2;
-  Timestamp last_heartbeat = 3;
+  dp_aero_l2.common.Timestamp last_heartbeat = 3;
   float cpu_usage = 4;         // CPU usage percentage (0-100)
   float memory_usage = 5;      // Memory usage percentage (0-100)
   string error_message = 6;    // Error description if status is ERROR
