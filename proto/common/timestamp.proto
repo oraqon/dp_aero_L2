@@ -1,0 +1,9 @@
+syntax = "proto3";
+
+package dp_aero_l2.common;
+
+// Timestamp message used throughout for all temporal information
+// Millisecond precision, synchronized across all data streams
+message Timestamp {
+  int64 timestamp_ms = 1;  // Milliseconds since epoch
+}

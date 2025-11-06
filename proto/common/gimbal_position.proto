@@ -1,0 +1,11 @@
+syntax = "proto3";
+
+package dp_aero_l2.common;
+
+// GimbalPosition using spherical coordinate system
+// Theta: horizontal scanning direction (azimuth angle)
+// Phi: vertical/elevation scanning direction
+message GimbalPosition {
+  float theta = 1;  // Azimuth angle in radians
+  float phi = 2;    // Elevation angle in radians
+}
