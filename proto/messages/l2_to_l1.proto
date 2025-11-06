@@ -1,0 +1,74 @@
+syntax = "proto3";
+
+package dp_aero_l2.messages;
+
+import "common/timestamp.proto";
+import "common/gimbal_position.proto";
+
+// Message from L2 fusion system to L1 nodes
+message L2ToL1Message {
+  string message_id = 1;                    // Unique message identifier
+  string target_node_id = 2;                // Target L1 node (empty for broadcast)
+  common.Timestamp timestamp = 3;          // Message timestamp
+  
+  oneof payload {
+    ControlCommand control_command = 4;     // Control instructions
+    ConfigurationUpdate config_update = 5;  // Configuration changes
+    FusionResult fusion_result = 6;         // Results from fusion algorithm
+    SystemCommand system_command = 7;       // System-level commands
+  }
+  
+  string correlation_id = 8;                // For request-response correlation
+  int32 priority = 9;                       // Message priority (higher = more urgent)
+}
+
+// Control commands for L1 nodes
+message ControlCommand {
+  enum CommandType {
+    UNKNOWN = 0;
+    START_SENSOR = 1;
+    STOP_SENSOR = 2;
+    CHANGE_RATE = 3;
+    POINT_GIMBAL = 4;
+    CALIBRATE = 5;
+    RESET = 6;
+  }
+  
+  CommandType command_type = 1;
+  map<string, string> parameters = 2;      // Command-specific parameters
+  common.GimbalPosition target_position = 3;  // For gimbal pointing commands
+  float target_rate_hz = 4;                // For rate change commands
+}
+
+// Configuration updates
+message ConfigurationUpdate {
+  map<string, string> config_parameters = 1;  // Key-value configuration
+  bool apply_immediately = 2;                  // Whether to apply config now or on restart
+  string config_section = 3;                  // Configuration section/category
+}
+
+// Results from fusion algorithm
+message FusionResult {
+  string algorithm_name = 1;                // Name of the fusion algorithm
+  string result_type = 2;                   // Type of result (e.g., "target_track", "obstacle_map")
+  bytes result_data = 3;                    // Serialized result data
+  float confidence = 4;                     // Confidence score (0.0 - 1.0)
+  map<string, string> metadata = 5;        // Additional result metadata
+}
+
+// System-level commands
+message SystemCommand {
+  enum SystemCommandType {
+    UNKNOWN = 0;
+    SHUTDOWN = 1;
+    RESTART = 2;
+    ENTER_MAINTENANCE = 3;
+    EXIT_MAINTENANCE = 4;
+    UPDATE_SOFTWARE = 5;
+    SYNC_TIME = 6;
+  }
+  
+  SystemCommandType command_type = 1;
+  map<string, string> parameters = 2;
+  common.Timestamp execution_time = 3;     // When to execute (optional)
+}

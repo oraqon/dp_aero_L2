@@ -111,14 +111,55 @@ target_include_directories(redis_stream_example PRIVATE
     ${REDIS_PLUS_PLUS_INCLUDE_DIRS}
 )
 
+# L2 Fusion System
+add_executable(l2_fusion_system 
+    src/l2_fusion_system.cpp
+    src/algorithm_framework.cpp
+)
+
+target_link_libraries(l2_fusion_system 
+    dp_aero_l2_proto
+    ${Protobuf_LIBRARIES}
+    ${HIREDIS_LIBRARIES}
+    ${REDIS_PLUS_PLUS_LIBRARIES}
+)
+
+target_include_directories(l2_fusion_system PRIVATE 
+    ${CMAKE_CURRENT_BINARY_DIR}
+    ${Protobuf_INCLUDE_DIRS}
+    ${HIREDIS_INCLUDE_DIRS}
+    ${REDIS_PLUS_PLUS_INCLUDE_DIRS}
+)
+
+# L1 Node Simulator
+add_executable(l1_node_simulator 
+    src/l1_node_simulator.cpp
+)
+
+target_link_libraries(l1_node_simulator 
+    dp_aero_l2_proto
+    ${Protobuf_LIBRARIES}
+    ${HIREDIS_LIBRARIES}
+    ${REDIS_PLUS_PLUS_LIBRARIES}
+)
+
+target_include_directories(l1_node_simulator PRIVATE 
+    ${CMAKE_CURRENT_BINARY_DIR}
+    ${Protobuf_INCLUDE_DIRS}
+    ${HIREDIS_INCLUDE_DIRS}
+    ${REDIS_PLUS_PLUS_INCLUDE_DIRS}
+)
+
 # Compiler flags for all targets
 target_compile_options(dp_aero_l2_example PRIVATE -Wall -Wextra -O2)
 target_compile_options(redis_publisher PRIVATE -Wall -Wextra -O2)
 target_compile_options(redis_subscriber PRIVATE -Wall -Wextra -O2)
 target_compile_options(redis_stream_example PRIVATE -Wall -Wextra -O2)
+target_compile_options(l2_fusion_system PRIVATE -Wall -Wextra -O2 -pthread)
+target_compile_options(l1_node_simulator PRIVATE -Wall -Wextra -O2 -pthread)
 
 # Install targets
-install(TARGETS dp_aero_l2_proto dp_aero_l2_example redis_publisher redis_subscriber redis_stream_example
+install(TARGETS dp_aero_l2_proto dp_aero_l2_example redis_publisher redis_subscriber redis_stream_example l2_fusion_system l1_node_simulator
     RUNTIME DESTINATION bin
     LIBRARY DESTINATION lib
     ARCHIVE DESTINATION lib

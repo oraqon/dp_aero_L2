@@ -1,0 +1,41 @@
+syntax = "proto3";
+
+package dp_aero_l2.messages;
+
+import "common/timestamp.proto";
+import "common/node_identity.proto";
+import "data_streams/sensor_data.proto";
+import "common/gimbal_position.proto";
+
+// Message from L1 nodes to L2 fusion system
+message L1ToL2Message {
+  string message_id = 1;                    // Unique message identifier
+  common.NodeIdentity sender = 2;           // Sending node information
+  common.Timestamp timestamp = 3;          // Message timestamp
+  
+  oneof payload {
+    data_streams.SensorData sensor_data = 4;     // Sensor measurements
+    common.NodeStatus node_status = 5;           // Node health/status
+    HeartbeatMessage heartbeat = 6;              // Keep-alive message
+    CapabilityAdvertisement capability = 7;      // Node capabilities
+  }
+  
+  int32 sequence_number = 8;                // Message sequence for ordering
+  string correlation_id = 9;                // For request-response correlation
+}
+
+// Heartbeat message to maintain connection
+message HeartbeatMessage {
+  common.Timestamp timestamp = 1;
+  string node_id = 2;
+  map<string, string> status_info = 3;  // Key-value status information
+}
+
+// Node capability advertisement
+message CapabilityAdvertisement {
+  string node_id = 1;
+  repeated string sensor_types = 2;      // List of sensor types this node provides
+  repeated string data_formats = 3;      // Supported data formats
+  float update_rate_hz = 4;              // Maximum update frequency
+  map<string, string> parameters = 5;    // Node-specific parameters
+}

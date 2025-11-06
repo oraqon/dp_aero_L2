@@ -1,0 +1,85 @@
+syntax = "proto3";
+
+package dp_aero_l2.data_streams;
+
+import "common/timestamp.proto";
+import "common/node_identity.proto";
+import "common/gimbal_position.proto";
+
+// Generic sensor data container
+message SensorData {
+  oneof data_type {
+    ImageData image = 1;
+    LidarData lidar = 2;
+    RadarData radar = 3;
+    ImuData imu = 4;
+    GpsData gps = 5;
+    bytes raw_data = 6;  // For unknown or custom data types
+  }
+}
+
+// Camera/Image sensor data
+message ImageData {
+  int32 width = 1;
+  int32 height = 2;
+  int32 channels = 3;
+  string encoding = 4;  // e.g., "rgb8", "bgr8", "mono8"
+  bytes image_data = 5;
+  float exposure_time = 6;
+  float gain = 7;
+}
+
+// LiDAR point cloud data
+message LidarData {
+  message Point {
+    float x = 1;
+    float y = 2;
+    float z = 3;
+    float intensity = 4;
+  }
+  
+  repeated Point points = 1;
+  int32 num_points = 2;
+  float angular_resolution = 3;
+  float range_min = 4;
+  float range_max = 5;
+}
+
+// Radar detection data
+message RadarData {
+  message Detection {
+    float range = 1;      // Distance in meters
+    float azimuth = 2;    // Angle in radians
+    float elevation = 3;  // Elevation angle in radians
+    float velocity = 4;   // Radial velocity in m/s
+    float rcs = 5;        // Radar cross-section
+  }
+  
+  repeated Detection detections = 1;
+  float max_range = 2;
+  float angular_resolution = 3;
+}
+
+// IMU (Inertial Measurement Unit) data
+message ImuData {
+  message Vector3 {
+    float x = 1;
+    float y = 2;
+    float z = 3;
+  }
+  
+  Vector3 linear_acceleration = 1;  // m/s^2
+  Vector3 angular_velocity = 2;     // rad/s
+  Vector3 magnetic_field = 3;       // Tesla
+}
+
+// GPS data
+message GpsData {
+  double latitude = 1;   // degrees
+  double longitude = 2;  // degrees
+  float altitude = 3;    // meters above sea level
+  float speed = 4;       // m/s
+  float heading = 5;     // degrees from north
+  int32 num_satellites = 6;
+  float hdop = 7;        // Horizontal dilution of precision
+}

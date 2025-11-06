@@ -1,0 +1,31 @@
+syntax = "proto3";
+
+package dp_aero_l2.common;
+
+import "timestamp.proto";
+
+// Node identification and metadata
+message NodeIdentity {
+  string node_id = 1;          // Unique identifier for the L1 node
+  string node_type = 2;        // Type of sensor (e.g., "camera", "lidar", "radar")
+  string location = 3;         // Physical location or mounting position
+  map<string, string> metadata = 4;  // Additional node-specific metadata
+}
+
+// Health and status information
+message NodeStatus {
+  enum Status {
+    UNKNOWN = 0;
+    ONLINE = 1;
+    OFFLINE = 2;
+    ERROR = 3;
+    MAINTENANCE = 4;
+  }
+  
+  string node_id = 1;
+  Status status = 2;
+  Timestamp last_heartbeat = 3;
+  float cpu_usage = 4;         // CPU usage percentage (0-100)
+  float memory_usage = 5;      // Memory usage percentage (0-100)
+  string error_message = 6;    // Error description if status is ERROR
+}
