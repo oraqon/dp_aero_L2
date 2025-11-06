@@ -69,23 +69,29 @@ target_include_directories(dp_aero_l2_proto PUBLIC ${Protobuf_INCLUDE_DIRS})
 #     src/redis_publisher.cpp
 # )
 
-# L2 Fusion System (temporarily disable - building just proto)
-# add_executable(l2_fusion_system 
-#     src/l2_fusion_system.cpp
-#     src/algorithm_framework.cpp
-# )
+add_executable(l2_fusion_system 
+    src/l2_fusion_system.cpp
+    src/algorithm_framework.cpp
+)
 
-# target_link_libraries(l2_fusion_system 
-#     dp_aero_l2_proto
-#     ${Protobuf_LIBRARIES}
-#     ${HIREDIS_LIBRARIES}
-#     ${REDIS_PLUS_PLUS_LIBRARIES}
-# )
+target_link_libraries(l2_fusion_system 
+    dp_aero_l2_proto
+    ${Protobuf_LIBRARIES}
+    ${HIREDIS_LIBRARIES}
+    ${REDIS_PLUS_PLUS_LIBRARIES}
+)
 
-# L1 Node Simulator (temporarily disabled)
-# add_executable(l1_node_simulator 
-#     src/l1_node_simulator.cpp
-# )
+# L1 Node Simulator
+add_executable(l1_node_simulator 
+    src/l1_node_simulator.cpp
+)
+
+target_link_libraries(l1_node_simulator 
+    dp_aero_l2_proto
+    ${Protobuf_LIBRARIES}
+    ${HIREDIS_LIBRARIES}
+    ${REDIS_PLUS_PLUS_LIBRARIES}
+)
 
 # Compiler flags for protobuf library
 target_compile_options(dp_aero_l2_proto PRIVATE -Wall -Wextra -O2)
