@@ -356,29 +356,15 @@ private:
         subscription_running_ = true;
         subscription_thread_ = std::thread([this]() {
             try {
-                auto subscriber = redis_messenger_->get_subscriber();
-                subscriber.on_message([this](std::string channel, std::string msg) {
-                    if (!subscription_running_) return;  // Check flag before processing
-                    try {
-                        auto message = redis_messenger_->template deserialize_message<messages::L1ToL2Message>(msg);
-                        handle_l1_message(message);
-                    } catch (const std::exception& e) {
-                        log_error("Message processing error: " + std::string(e.what()));
-                    }
-                });
-                
-                subscriber.subscribe(config_.l1_to_l2_topic);
-                while (subscription_running_) {
-                    try {
-                        subscriber.consume();
-                    } catch (const sw::redis::Error& e) {
+                redis_messenger_->subscribe<messages::L1ToL2Message>(
+                    config_.l1_to_l2_topic,
+                    [this](const messages::L1ToL2Message& message) {
                         if (subscription_running_) {
-                            log_error("Redis subscription error: " + std::string(e.what()));
-                            std::this_thread::sleep_for(std::chrono::seconds(1));  // Brief pause before retry
+                            handle_l1_message(message);
                         }
-                        break;
-                    }
-                }
+                    },
+                    &subscription_running_
+                );
             } catch (const std::exception& e) {
                 log_error("Redis subscription thread error: " + std::string(e.what()));
             }

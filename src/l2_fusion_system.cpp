@@ -4,6 +4,7 @@
 #include <signal.h>
 #include <thread>
 #include <iomanip>
+#include <cstdlib>
 
 using namespace dp_aero_l2;
 
@@ -12,6 +13,13 @@ std::atomic<bool> running{true};
 void signal_handler(int signal) {
     std::cout << "\nReceived signal " << signal << ", shutting down L2 system...\n";
     running = false;
+    
+    // Give a brief moment for graceful shutdown, then force exit
+    std::thread([signal]() {
+        std::this_thread::sleep_for(std::chrono::milliseconds(500));
+        std::cout << "Force terminating due to Redis blocking...\n";
+        std::_Exit(signal == SIGINT ? 0 : signal);
+    }).detach();
 }
 
 void print_usage(const char* program_name) {

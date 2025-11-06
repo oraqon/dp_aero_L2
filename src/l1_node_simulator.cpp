@@ -6,6 +6,7 @@
 #include <random>
 #include <signal.h>
 #include <iomanip>
+#include <cstdlib>
 
 using namespace dp_aero_l2;
 
@@ -14,6 +15,13 @@ std::atomic<bool> running{true};
 void signal_handler(int signal) {
     std::cout << "\nReceived signal " << signal << ", shutting down L1 node...\n";
     running = false;
+    
+    // Give a brief moment for graceful shutdown, then force exit
+    std::thread([signal]() {
+        std::this_thread::sleep_for(std::chrono::milliseconds(500));
+        std::cout << "Force terminating due to Redis blocking...\n";
+        std::_Exit(signal == SIGINT ? 0 : signal);
+    }).detach();
 }
 
 class L1NodeSimulator {
@@ -117,8 +125,11 @@ private:
         try {
             redis_messenger_->subscribe<messages::L2ToL1Message>("l2_to_l1",
                 [this](const messages::L2ToL1Message& message) {
-                    handle_l2_message(message);
-                });
+                    if (running) {
+                        handle_l2_message(message);
+                    }
+                },
+                &running);
         } catch (const std::exception& e) {
             std::cerr << "[" << node_id_ << "] Subscriber error: " << e.what() << std::endl;
         }

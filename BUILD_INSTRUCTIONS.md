@@ -457,3 +457,26 @@ cd /home/oded-oraqon/dp_aero_L2/build
 - All synchronization mechanisms functioning as designed
 
 **🚀 Production Ready**: The system is now fully operational and ready for deployment in mission-critical aerospace applications!
+
+## 🛑 **Shutdown Behavior**
+
+Both executables now handle Ctrl+C (SIGINT) properly:
+
+```bash
+# Start either application
+./l2_fusion_system --algorithm TargetTrackingAlgorithm --debug
+# or
+./l1_node_simulator --node-id sensor_1 --node-type radar --location "test_site"
+
+# Press Ctrl+C to shutdown
+# Output will show:
+# "Received signal 2, shutting down [L1 node/L2 system]..."
+# "Force terminating due to Redis blocking..."
+# Process exits cleanly within 500ms
+```
+
+**Shutdown Process**: 
+1. Signal handler catches SIGINT/SIGTERM
+2. Sets running flag to false for graceful shutdown  
+3. After 500ms timeout, forces termination to handle Redis subscriber blocking
+4. Applications exit cleanly with proper return codes

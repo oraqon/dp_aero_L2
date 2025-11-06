@@ -6,6 +6,7 @@
 #include <chrono>
 #include <iostream>
 #include <mutex>
+#include <thread>
 
 namespace dp_aero_l2 {
 namespace redis_utils {
@@ -54,10 +55,11 @@ public:
         redis_.publish(channel, serialized);
     }
 
-    // Subscribe to channel with callback
+    // Subscribe to channel with callback (with shutdown support)
     template<typename T>
     void subscribe(const std::string& channel, 
-                  std::function<void(const T&)> callback) {
+                  std::function<void(const T&)> callback,
+                  const std::atomic<bool>* shutdown_flag = nullptr) {
         auto subscriber = redis_.subscriber();
         subscriber.on_message([this, callback](std::string channel, std::string msg) {
             try {
@@ -70,6 +72,11 @@ public:
         
         subscriber.subscribe(channel);
         while (true) {
+            // Check shutdown flag frequently
+            if (shutdown_flag && !(*shutdown_flag)) {
+                break;
+            }
+            
             try {
                 subscriber.consume();
             } catch (const Error& e) {
