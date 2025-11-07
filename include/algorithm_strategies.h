@@ -180,13 +180,15 @@ public:
  * @brief Threat-based target prioritizer
  */
 class ThreatBasedPrioritizer : public TargetPrioritizer {
-private:
+public:
     struct ThreatParameters {
         float range_weight = 0.3f;      // Closer targets are higher threat
         float velocity_weight = 0.2f;   // Faster targets are higher threat  
         float confidence_weight = 0.3f; // More confident detections prioritized
         float heading_weight = 0.2f;    // Targets heading toward us are higher threat
     };
+
+private:
     
     ThreatParameters params_;
     

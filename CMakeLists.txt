@@ -10,6 +10,16 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 find_package(Protobuf REQUIRED)
 find_package(PkgConfig REQUIRED)
 
+# Google Test Framework
+if(ENABLE_TESTING)
+    find_package(GTest REQUIRED)
+    # GMock is included with GTest in modern versions
+    if(NOT TARGET GTest::gmock)
+        find_package(PkgConfig REQUIRED)
+        pkg_check_modules(GMOCK gmock)
+    endif()
+endif()
+
 # Find Redis++ (hiredis-based C++ client)
 find_package(PkgConfig REQUIRED)
 pkg_check_modules(HIREDIS REQUIRED hiredis)
@@ -98,9 +108,20 @@ target_link_libraries(l1_node_simulator
 # Compiler flags for protobuf library
 target_compile_options(dp_aero_l2_proto PRIVATE -Wall -Wextra -O2)
 
+# Unit tests
+if(BUILD_TESTING)
+    add_subdirectory(tests)
+endif()
+
 # Install targets
 install(TARGETS dp_aero_l2_proto
     RUNTIME DESTINATION bin
     LIBRARY DESTINATION lib
     ARCHIVE DESTINATION lib
 )
+
+# Add tests subdirectory if testing is enabled
+if(ENABLE_TESTING)
+    enable_testing()
+    add_subdirectory(tests)
+endif()
