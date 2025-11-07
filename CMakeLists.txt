@@ -72,6 +72,7 @@ target_include_directories(dp_aero_l2_proto PUBLIC ${Protobuf_INCLUDE_DIRS})
 add_executable(l2_fusion_system 
     src/l2_fusion_system.cpp
     src/algorithm_framework.cpp
+    src/task_manager.cpp
 )
 
 target_link_libraries(l2_fusion_system 

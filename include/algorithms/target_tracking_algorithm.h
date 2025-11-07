@@ -76,6 +76,12 @@ public:
         context.set_data<int>("detection_count", 0);
         context.set_data<Parameters>("parameters", params_);
         
+        // Register default device for first demo (single device operation)
+        std::string default_device_id = "default_device";
+        std::vector<std::string> capabilities = {"radar", "lidar", "camera", "gimbal_control"};
+        get_task_manager().register_device_capabilities(default_device_id, capabilities);
+        context.set_data<std::string>("default_device_id", default_device_id);
+        
         // Enter initial state
         if (context.current_state && context.current_state->on_enter) {
             context.current_state->on_enter(context);
@@ -115,6 +121,9 @@ public:
         if (context.current_state && context.current_state->on_update) {
             context.current_state->on_update(context);
         }
+        
+        // Update all active tasks
+        update_all_tasks(context);
         
         // Update target tracking
         update_target_tracking(context);
@@ -281,6 +290,14 @@ private:
                 if (target_id.empty()) {
                     target_id = "target_" + std::to_string(targets.size());
                     targets[target_id] = Target(target_id);
+                    
+                    // Create task for new target and assign to default device
+                    auto default_device_id = context.get_data<std::string>("default_device_id");
+                    if (default_device_id) {
+                        std::string task_id = create_task_for_target(target_id, fusion::Task::Type::TRACK_TARGET, fusion::Task::Priority::HIGH);
+                        assign_task_to_device(task_id, *default_device_id);
+                        log_info("Created tracking task " + task_id + " for new target " + target_id);
+                    }
                 }
                 
                 // Update target
@@ -328,6 +345,14 @@ private:
                 if (target_id.empty()) {
                     target_id = "target_" + std::to_string(targets.size());
                     targets[target_id] = Target(target_id);
+                    
+                    // Create task for new target and assign to default device
+                    auto default_device_id = context.get_data<std::string>("default_device_id");
+                    if (default_device_id) {
+                        std::string task_id = create_task_for_target(target_id, fusion::Task::Type::TRACK_TARGET, fusion::Task::Priority::HIGH);
+                        assign_task_to_device(task_id, *default_device_id);
+                        log_info("Created tracking task " + task_id + " for new target " + target_id);
+                    }
                 }
                 
                 update_target_position(targets[target_id], x, y, z, 0.6f, node_id);

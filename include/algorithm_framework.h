@@ -14,6 +14,7 @@
 
 #include "messages/l1_to_l2.pb.h"
 #include "messages/l2_to_l1.pb.h"
+#include "task_manager.h"
 
 namespace dp_aero_l2::fusion {
 
@@ -225,6 +226,7 @@ public:
     
 protected:
     StateManager state_manager_;
+    TaskManager task_manager_;
     
     /**
      * @brief Helper to create and configure the state machine
@@ -257,6 +259,38 @@ protected:
      */
     void set_initial_state(const std::string& state_name) {
         state_manager_.set_initial_state(state_name);
+    }
+    
+    /**
+     * @brief Get task manager for target-device-task assignments
+     */
+    TaskManager& get_task_manager() {
+        return task_manager_;
+    }
+    
+    const TaskManager& get_task_manager() const {
+        return task_manager_;
+    }
+    
+    /**
+     * @brief Helper to create a task for a target
+     */
+    std::string create_task_for_target(const std::string& target_id, Task::Type type, Task::Priority priority = Task::Priority::NORMAL) {
+        return task_manager_.create_task(target_id, type, priority);
+    }
+    
+    /**
+     * @brief Helper to assign task to device
+     */
+    bool assign_task_to_device(const std::string& task_id, const std::string& device_id) {
+        return task_manager_.assign_task_to_device(task_id, device_id);
+    }
+    
+    /**
+     * @brief Helper to update all tasks
+     */
+    void update_all_tasks(AlgorithmContext& context) {
+        task_manager_.update_all_tasks(context);
     }
 };
 

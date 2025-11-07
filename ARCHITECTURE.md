@@ -44,6 +44,26 @@ The heart of the system - provides a generic interface for fusion algorithms wit
 - **Algorithm Context**: Shared data store and message history
 - **Plugin Architecture**: Dynamic algorithm loading via registry
 - **Type Safety**: Template-based with C++20 concepts
+- **Task Manager Integration**: Built-in TaskManager for target-device-task assignments
+
+### 1.1 **Task Manager** (`include/task_manager.h`)
+### This is the **Assignment Coordinator**
+
+Manages the mapping between targets, devices, and tasks. Preparation for multi-device coordination.
+
+**Key Features:**
+- **Target-Device-Task Mapping**: Maintains relationships between all three entities
+- **Task State Machines**: Each task has its own state machine (INITIALIZING → EXECUTING → COMPLETING)
+- **Device Capability Registry**: Tracks what each device can do
+- **Priority-Based Assignment**: Tasks have priority levels (LOW, NORMAL, HIGH, CRITICAL)
+- **Single Device Mode**: Currently assigns all tasks to one device (preparation for multi-device)
+
+**Task Types:**
+- `TRACK_TARGET`: Track a specific target
+- `SCAN_AREA`: Scan for new targets in area  
+- `POINT_GIMBAL`: Point gimbal at specific coordinates
+- `CALIBRATE_SENSOR`: Perform sensor calibration
+- `MONITOR_STATUS`: Monitor device health
 
 **Example Algorithm States:**
 ```cpp
@@ -51,6 +71,22 @@ The heart of the system - provides a generic interface for fusion algorithms wit
 IDLE → ACQUIRING → TRACKING → LOST → IDLE
   ↑                             ↓
   └─────────── RESET ───────────┘
+```
+
+**Example Task Management (First Demo - Single Device):**
+```cpp
+// During algorithm initialization
+std::string device_id = "default_device";
+std::vector<std::string> capabilities = {"radar", "lidar", "camera", "gimbal_control"};
+get_task_manager().register_device_capabilities(device_id, capabilities);
+
+// When new target detected
+std::string target_id = "target_001";
+std::string task_id = create_task_for_target(target_id, Task::Type::TRACK_TARGET, Task::Priority::HIGH);
+assign_task_to_device(task_id, device_id);
+
+// During algorithm update
+update_all_tasks(context); // Updates all task state machines
 ```
 
 ### 2. **L2 Fusion Manager** (`include/l2_fusion_manager.h`)
