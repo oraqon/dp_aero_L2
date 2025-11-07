@@ -170,6 +170,11 @@ private:
             capability->add_data_formats("rgb_image");
             (*capability->mutable_parameters())["resolution"] = "1920x1080";
             (*capability->mutable_parameters())["fps"] = "30";
+        } else if (node_type_ == "coherent") {
+            capability->add_data_formats("coherent_pulse");
+            (*capability->mutable_parameters())["max_range"] = "300.0";
+            (*capability->mutable_parameters())["beam_width"] = "0.05";
+            (*capability->mutable_parameters())["wavelength"] = "1.55e-6";
         }
         
         redis_messenger_->publish("l1_to_l2", msg);
@@ -250,6 +255,10 @@ private:
             generate_imu_data(sensor_data->mutable_imu());
         } else if (node_type_ == "gps") {
             generate_gps_data(sensor_data->mutable_gps());
+        } else if (node_type_ == "coherent") {
+            // Coherent devices typically don't generate sensor data autonomously
+            // They respond to commands from L2. We can generate status data instead.
+            generate_coherent_status_data(sensor_data);
         }
         
         redis_messenger_->publish("l1_to_l2", msg);
@@ -347,6 +356,21 @@ private:
         gps_data->set_hdop(std::uniform_real_distribution<float>(0.8f, 2.0f)(rng_));
     }
     
+    void generate_coherent_status_data(data_streams::SensorData* sensor_data) {
+        // For coherent devices, we generate status information instead of sensor readings
+        // since coherent devices are typically tasked devices that respond to commands
+        
+        // For now, just generate some basic status using GPS as a placeholder
+        // In a real system, this would be coherent-specific status
+        auto* gps_data = sensor_data->mutable_gps();
+        gps_data->set_latitude(0.0);
+        gps_data->set_longitude(0.0);
+        gps_data->set_altitude(0.0);
+        gps_data->set_num_satellites(0); // Indicates this is status, not real GPS
+        
+        std::cout << "[" << node_id_ << "] Generated coherent device status\n";
+    }
+    
     void handle_l2_message(const messages::L2ToL1Message& message) {
         // Check if message is for this node or broadcast
         if (!message.target_node_id().empty() && message.target_node_id() != node_id_) {
@@ -394,6 +418,13 @@ private:
             case messages::ControlCommand::POINT_GIMBAL:
                 std::cout << "POINT_GIMBAL - theta: " << command.target_position().theta() 
                          << ", phi: " << command.target_position().phi() << "\n";
+                if (node_type_ == "coherent") {
+                    std::cout << "[" << node_id_ << "] *** COHERENT DEVICE TASKED ***\n";
+                    std::cout << "[" << node_id_ << "] Pointing coherent beam to target coordinates\n";
+                    std::cout << "[" << node_id_ << "] Azimuth: " << command.target_position().theta() * 180.0 / M_PI << " degrees\n";
+                    std::cout << "[" << node_id_ << "] Elevation: " << command.target_position().phi() * 180.0 / M_PI << " degrees\n";
+                    std::cout << "[" << node_id_ << "] Coherent beam engagement initiated!\n";
+                }
                 break;
             case messages::ControlCommand::CALIBRATE:
                 std::cout << "CALIBRATE\n";
@@ -517,9 +548,9 @@ int main(int argc, char* argv[]) {
     }
     
     // Validate node type
-    std::vector<std::string> valid_types = {"radar", "lidar", "camera", "imu", "gps"};
+    std::vector<std::string> valid_types = {"radar", "lidar", "camera", "imu", "gps", "coherent"};
     if (std::find(valid_types.begin(), valid_types.end(), node_type) == valid_types.end()) {
-        std::cerr << "Error: Invalid node type. Valid types: radar, lidar, camera, imu, gps\n";
+        std::cerr << "Error: Invalid node type. Valid types: radar, lidar, camera, imu, gps, coherent\n";
         return 1;
     }
     

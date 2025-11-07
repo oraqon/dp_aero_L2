@@ -535,6 +535,9 @@ private:
             std::chrono::duration_cast<std::chrono::milliseconds>(
                 std::chrono::system_clock::now().time_since_epoch()).count());
         
+        // Target coherent device specifically
+        gimbal_cmd.set_target_node_id("coherent_001");
+        
         auto* control_cmd = gimbal_cmd.mutable_control_command();
         control_cmd->set_command_type(messages::ControlCommand::POINT_GIMBAL);
         
@@ -548,7 +551,8 @@ private:
         
         context.add_output_message(gimbal_cmd);
         
-        log_debug("Sent gimbal command for target " + target.target_id + 
+        log_info("*** TASKING COHERENT DEVICE ***");
+        log_info("Sent gimbal command to coherent_001 for target " + target.target_id + 
                  " (theta: " + std::to_string(theta) + ", phi: " + std::to_string(phi) + ")");
     }
     
