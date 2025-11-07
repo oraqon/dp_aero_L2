@@ -532,15 +532,19 @@ private:
             target_pointers.push_back(&target);
         }
         
-        // Use target prioritizer to select highest priority target
+        // Use target prioritizer to select highest priority target (thread-safe)
         Target* best_target = nullptr;
-        if (get_target_prioritizer() && !target_pointers.empty()) {
-            best_target = get_target_prioritizer()->select_highest_priority_target(target_pointers, context);
-            log_info("Selected target using " + get_target_prioritizer()->get_name() + " prioritizer");
-        } else if (!target_pointers.empty()) {
-            // Fallback to first target if no prioritizer
-            best_target = target_pointers[0];
-            log_warning("No target prioritizer available, using first target");
+        if (!target_pointers.empty()) {
+            try {
+                best_target = with_target_prioritizer([&](const auto& prioritizer) {
+                    log_info("Selected target using " + prioritizer.get_name() + " prioritizer");
+                    return prioritizer.select_highest_priority_target(target_pointers, context);
+                });
+            } catch (const std::runtime_error&) {
+                // Fallback to first target if no prioritizer
+                best_target = target_pointers[0];
+                log_warning("No target prioritizer available, using first target");
+            }
         }
         
         if (best_target) {
