@@ -34,6 +34,7 @@ The L2 Fusion System is a modular, scalable framework for fusing data from multi
 ## Key Components
 
 ### 1. **Algorithm Framework** (`include/algorithm_framework.h`)
+### This is the **Target Manager**
 
 The heart of the system - provides a generic interface for fusion algorithms with built-in state machine support.
 
@@ -53,6 +54,7 @@ IDLE → ACQUIRING → TRACKING → LOST → IDLE
 ```
 
 ### 2. **L2 Fusion Manager** (`include/l2_fusion_manager.h`)
+### Later (after demo #1): Will become the **Device Manager** 
 
 Main system orchestrator that handles Redis communication, node management, and algorithm execution.
 
@@ -62,6 +64,7 @@ Main system orchestrator that handles Redis communication, node management, and 
 - **Message Queue**: Buffered processing with configurable queue size
 - **Statistics**: Real-time performance monitoring and reporting
 - **Error Handling**: Robust error recovery and logging
+- **Later (after demo #1):** Will do device management (based on target priority and device availability)
 
 ### 3. **Protocol Buffers Messages**
 
