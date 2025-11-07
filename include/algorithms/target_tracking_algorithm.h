@@ -1,6 +1,7 @@
 #pragma once
 
-#include "algorithm_framework.h"
+#include "strategy_based_fusion_algorithm.h"
+#include "target.h"
 #include <unordered_map>
 #include <vector>
 #include <cmath>
@@ -19,23 +20,10 @@ namespace dp_aero_l2::algorithms {
  * - TRACKING: Actively tracking confirmed target(s)
  * - LOST: Target lost, searching for reacquisition
  */
-class TargetTrackingAlgorithm : public fusion::FusionAlgorithm {
+class TargetTrackingAlgorithm : public fusion::StrategyBasedFusionAlgorithm {
 private:
-    struct Target {
-        std::string target_id;
-        float x, y, z;          // Position
-        float vx, vy, vz;       // Velocity
-        float confidence;       // Confidence score
-        std::chrono::steady_clock::time_point last_update;
-        std::unordered_map<std::string, int> sensor_detections; // Count per sensor
-        
-        // Default constructor (required for std::unordered_map)
-        Target() : target_id(""), x(0), y(0), z(0), vx(0), vy(0), vz(0), confidence(0) {}
-        
-        // Parameterized constructor
-        Target(const std::string& id) : target_id(id), x(0), y(0), z(0), 
-                                       vx(0), vy(0), vz(0), confidence(0) {}
-    };
+    // Use the shared Target definition from target.h
+    using Target = algorithms::Target;
     
     // Algorithm parameters
     struct Parameters {
@@ -81,6 +69,14 @@ public:
         std::vector<std::string> capabilities = {"radar", "lidar", "camera", "gimbal_control"};
         get_task_manager().register_device_capabilities(default_device_id, capabilities);
         context.set_data<std::string>("default_device_id", default_device_id);
+        
+        // Set up default strategies if none provided
+        if (!get_target_prioritizer()) {
+            set_target_prioritizer(std::make_unique<ConfidenceBasedPrioritizer>());
+        }
+        if (!get_device_assignment_strategy()) {
+            set_device_assignment_strategy(std::make_unique<SingleDeviceAssignmentStrategy>(default_device_id));
+        }
         
         // Enter initial state
         if (context.current_state && context.current_state->on_enter) {
@@ -291,12 +287,20 @@ private:
                     target_id = "target_" + std::to_string(targets.size());
                     targets[target_id] = Target(target_id);
                     
-                    // Create task for new target and assign to default device
-                    auto default_device_id = context.get_data<std::string>("default_device_id");
-                    if (default_device_id) {
-                        std::string task_id = create_task_for_target(target_id, fusion::Task::Type::TRACK_TARGET, fusion::Task::Priority::HIGH);
-                        assign_task_to_device(task_id, *default_device_id);
-                        log_info("Created tracking task " + task_id + " for new target " + target_id);
+                    // Create task for new target and assign using strategy
+                    std::string task_id = create_task_for_target(target_id, fusion::Task::Type::TRACK_TARGET, fusion::Task::Priority::HIGH);
+                    
+                    // Use device assignment strategy to select device
+                    if (get_device_assignment_strategy()) {
+                        std::string assigned_device = get_device_assignment_strategy()->select_device_for_target(
+                            targets[target_id], get_task_manager(), context);
+                        if (!assigned_device.empty()) {
+                            assign_task_to_device(task_id, assigned_device);
+                            log_info("Created tracking task " + task_id + " for new target " + target_id + 
+                                   " assigned to device " + assigned_device);
+                        } else {
+                            log_warning("No suitable device found for target " + target_id);
+                        }
                     }
                 }
                 
@@ -346,12 +350,20 @@ private:
                     target_id = "target_" + std::to_string(targets.size());
                     targets[target_id] = Target(target_id);
                     
-                    // Create task for new target and assign to default device
-                    auto default_device_id = context.get_data<std::string>("default_device_id");
-                    if (default_device_id) {
-                        std::string task_id = create_task_for_target(target_id, fusion::Task::Type::TRACK_TARGET, fusion::Task::Priority::HIGH);
-                        assign_task_to_device(task_id, *default_device_id);
-                        log_info("Created tracking task " + task_id + " for new target " + target_id);
+                    // Create task for new target and assign using strategy
+                    std::string task_id = create_task_for_target(target_id, fusion::Task::Type::TRACK_TARGET, fusion::Task::Priority::HIGH);
+                    
+                    // Use device assignment strategy to select device
+                    if (get_device_assignment_strategy()) {
+                        std::string assigned_device = get_device_assignment_strategy()->select_device_for_target(
+                            targets[target_id], get_task_manager(), context);
+                        if (!assigned_device.empty()) {
+                            assign_task_to_device(task_id, assigned_device);
+                            log_info("Created tracking task " + task_id + " for new target " + target_id + 
+                                   " assigned to device " + assigned_device);
+                        } else {
+                            log_warning("No suitable device found for target " + target_id);
+                        }
                     }
                 }
                 
@@ -513,12 +525,21 @@ private:
         
         auto targets = *targets_opt;
         
-        // Find highest confidence target
-        Target* best_target = nullptr;
+        // Convert to vector of pointers for prioritizer
+        std::vector<Target*> target_pointers;
         for (auto& [id, target] : targets) {
-            if (!best_target || target.confidence > best_target->confidence) {
-                best_target = &target;
-            }
+            target_pointers.push_back(&target);
+        }
+        
+        // Use target prioritizer to select highest priority target
+        Target* best_target = nullptr;
+        if (get_target_prioritizer() && !target_pointers.empty()) {
+            best_target = get_target_prioritizer()->select_highest_priority_target(target_pointers, context);
+            log_info("Selected target using " + get_target_prioritizer()->get_name() + " prioritizer");
+        } else if (!target_pointers.empty()) {
+            // Fallback to first target if no prioritizer
+            best_target = target_pointers[0];
+            log_warning("No target prioritizer available, using first target");
         }
         
         if (best_target) {

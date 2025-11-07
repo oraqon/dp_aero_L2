@@ -45,6 +45,7 @@ The heart of the system - provides a generic interface for fusion algorithms wit
 - **Plugin Architecture**: Dynamic algorithm loading via registry
 - **Type Safety**: Template-based with C++20 concepts
 - **Task Manager Integration**: Built-in TaskManager for target-device-task assignments
+- **Strategy Support**: `StrategyBasedFusionAlgorithm` for modular algorithm components
 
 ### 1.1 **Task Manager** (`include/task_manager.h`)
 ### This is the **Assignment Coordinator**
@@ -89,7 +90,33 @@ assign_task_to_device(task_id, device_id);
 update_all_tasks(context); // Updates all task state machines
 ```
 
-### 2. **L2 Fusion Manager** (`include/l2_fusion_manager.h`)
+### 2. **Algorithm Strategies** (`include/algorithm_strategies.h`)
+### Modular Algorithm Components
+
+The strategy pattern implementation that enables separate override of algorithm components as requested.
+
+**Key Features:**
+- **Target Prioritization Strategies**: Abstract `TargetPrioritizer` interface
+  - `ConfidenceBasedPrioritizer`: Prioritizes by sensor confidence levels
+  - `ThreatBasedPrioritizer`: Advanced threat assessment prioritization
+- **Device Assignment Strategies**: Abstract `DeviceAssignmentStrategy` interface  
+  - `SingleDeviceAssignmentStrategy`: Assigns all tasks to one device (current demo)
+  - `CapabilityBasedAssignmentStrategy`: Multi-device assignment by capabilities
+- **Pluggable Architecture**: Runtime strategy swapping
+- **Strategy Composition**: Combine different prioritization and assignment approaches
+
+**Example Strategy Usage:**
+```cpp
+// Set up custom prioritization
+auto algorithm = std::make_unique<TargetTrackingAlgorithm>();
+algorithm->set_target_prioritizer(std::make_unique<ThreatBasedPrioritizer>());
+algorithm->set_device_assignment_strategy(std::make_unique<CapabilityBasedAssignmentStrategy>());
+
+// Or use defaults (confidence-based + single device)
+auto simple_algorithm = std::make_unique<TargetTrackingAlgorithm>();
+```
+
+### 3. **L2 Fusion Manager** (`include/l2_fusion_manager.h`)
 ### Later (after demo #1): Will become the **Device Manager** 
 
 Main system orchestrator that handles Redis communication, node management, and algorithm execution.
@@ -102,7 +129,20 @@ Main system orchestrator that handles Redis communication, node management, and 
 - **Error Handling**: Robust error recovery and logging
 - **Later (after demo #1):** Will do device management (based on target priority and device availability)
 
-### 3. **Protocol Buffers Messages**
+### 4. **Target Tracking Algorithm** (`include/algorithms/target_tracking_algorithm.h`)
+
+Enhanced L2 fusion logic using the algorithm framework with modular strategy support.
+
+**Features:**
+- **Target Management**: Maintains and updates target states using shared `Target` struct
+- **Sensor Fusion**: Combines data from multiple L1 devices
+- **Gimbal Commands**: Generates targeting commands for coherent devices
+- **State Machine Integration**: Uses built-in state management
+- **Task Integration**: Creates and manages device-specific tasks
+- **Modular Strategies**: Uses pluggable prioritization and assignment algorithms
+- **Strategy Override**: Separate control of target prioritization vs device assignment
+
+### 5. **Protocol Buffers Messages**
 
 Strongly-typed message definitions for L1↔L2 communication:
 
@@ -116,7 +156,7 @@ Strongly-typed message definitions for L1↔L2 communication:
   - Fusion results
   - System commands
 
-### 4. **Redis Integration** (`include/redis_utils.h`)
+### 6. **Redis Integration** (`include/redis_utils.h`)
 
 Type-safe Redis communication layer supporting multiple patterns:
 - **Pub/Sub**: Real-time message broadcasting
@@ -125,12 +165,13 @@ Type-safe Redis communication layer supporting multiple patterns:
 
 ## Implementation Example
 
-### Creating a Custom Algorithm
+### Creating a Custom Algorithm with Strategies
 
 ```cpp
 #include "algorithm_framework.h"
+#include "algorithm_strategies.h"
 
-class MyFusionAlgorithm : public fusion::FusionAlgorithm {
+class MyFusionAlgorithm : public fusion::StrategyBasedFusionAlgorithm {
 public:
     std::string get_name() const override { return "MyFusionAlgorithm"; }
     std::string get_version() const override { return "1.0.0"; }
@@ -138,6 +179,15 @@ public:
     
     void initialize(fusion::AlgorithmContext& context) override {
         setup_state_machine();
+        
+        // Set up strategies - can be overridden separately
+        if (!get_target_prioritizer()) {
+            set_target_prioritizer(std::make_unique<ConfidenceBasedPrioritizer>());
+        }
+        if (!get_device_assignment_strategy()) {
+            set_device_assignment_strategy(std::make_unique<SingleDeviceAssignmentStrategy>());
+        }
+        
         // Initialize your algorithm state
         context.set_data<int>("detection_count", 0);
     }
@@ -149,6 +199,13 @@ public:
             // Your fusion logic here
             auto count = context.get_data<int>("detection_count").value_or(0);
             context.set_data("detection_count", count + 1);
+            
+            // Use prioritizer strategy to handle targets
+            if (get_target_prioritizer()) {
+                std::vector<Target> targets = /* get current targets */;
+                auto prioritized = get_target_prioritizer()->prioritize_targets(targets);
+                // Process highest priority targets first
+            }
             
             // Trigger state transition if needed
             if (count > 10) {
@@ -186,6 +243,45 @@ protected:
 };
 ```
 
+### Strategy Override Examples
+
+The architecture now supports separate override of algorithm components as requested:
+
+**1. Override Target Prioritization Only:**
+```cpp
+// Create algorithm with default device assignment but custom prioritization
+auto algorithm = std::make_unique<TargetTrackingAlgorithm>();
+algorithm->set_target_prioritizer(std::make_unique<ThreatBasedPrioritizer>());
+// Device assignment remains SingleDeviceAssignmentStrategy (default)
+```
+
+**2. Override Device Assignment Only:**
+```cpp
+// Create algorithm with default prioritization but custom device assignment
+auto algorithm = std::make_unique<TargetTrackingAlgorithm>();
+algorithm->set_device_assignment_strategy(std::make_unique<CapabilityBasedAssignmentStrategy>());
+// Target prioritization remains ConfidenceBasedPrioritizer (default)
+```
+
+**3. Override Both Strategies:**
+```cpp
+// Full customization - override both algorithm parts
+auto algorithm = std::make_unique<TargetTrackingAlgorithm>();
+algorithm->set_target_prioritizer(std::make_unique<ThreatBasedPrioritizer>());
+algorithm->set_device_assignment_strategy(std::make_unique<CapabilityBasedAssignmentStrategy>());
+```
+
+**4. Runtime Strategy Swapping:**
+```cpp
+// Change strategies during runtime
+if (threat_level_increased) {
+    algorithm->set_target_prioritizer(std::make_unique<ThreatBasedPrioritizer>());
+}
+if (multiple_devices_available) {
+    algorithm->set_device_assignment_strategy(std::make_unique<CapabilityBasedAssignmentStrategy>());
+}
+```
+
 ### Registering and Using Your Algorithm
 
 ```cpp
@@ -197,6 +293,10 @@ int main() {
     // Create L2 system
     core::L2FusionManager fusion_manager;
     auto algorithm = registry.create_algorithm("MyFusionAlgorithm");
+    
+    // Override strategies as needed
+    algorithm->set_target_prioritizer(std::make_unique<ThreatBasedPrioritizer>());
+    
     fusion_manager.set_algorithm(std::move(algorithm));
     
     // Start system

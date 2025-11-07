@@ -296,7 +296,8 @@ public:
             redis_messenger_->publish(config_.l2_to_l1_topic, message);
             messages_sent_++;
             
-            log_debug("Sent message to L1 - Target: " + message.target_node_id() + 
+            std::string target = message.target_node_id().empty() ? "BROADCAST" : message.target_node_id();
+            log_debug("Sent message to L1 - Target: " + target + 
                      ", Type: " + std::to_string(message.payload_case()));
         } catch (const std::exception& e) {
             log_error("Failed to send message to L1: " + std::string(e.what()));

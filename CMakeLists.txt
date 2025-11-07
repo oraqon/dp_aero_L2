@@ -73,6 +73,7 @@ add_executable(l2_fusion_system
     src/l2_fusion_system.cpp
     src/algorithm_framework.cpp
     src/task_manager.cpp
+    src/algorithm_strategies.cpp
 )
 
 target_link_libraries(l2_fusion_system 
