@@ -5,6 +5,8 @@
 #include <unordered_map>
 #include <vector>
 #include <cmath>
+#include <numeric>
+#include <algorithm>
 
 namespace dp_aero_l2::algorithms {
 
@@ -477,14 +479,13 @@ private:
         
         // Remove old targets
         auto now = std::chrono::steady_clock::now();
-        for (auto it = targets.begin(); it != targets.end();) {
-            if (now - it->second.last_update > params.target_timeout * 2) {
-                log_info("Removing old target: " + it->first);
-                it = targets.erase(it);
-            } else {
-                ++it;
+        std::erase_if(targets, [&](const auto& target_pair) {
+            bool should_remove = now - target_pair.second.last_update > params.target_timeout * 2;
+            if (should_remove) {
+                log_info("Removing old target: " + target_pair.first);
             }
-        }
+            return should_remove;
+        });
         
         context.set_data("targets", targets);
     }
@@ -710,10 +711,10 @@ private:
     float calculate_overall_confidence(const std::unordered_map<std::string, Target>& targets) {
         if (targets.empty()) return 0.0f;
         
-        float total_confidence = 0.0f;
-        for (const auto& [id, target] : targets) {
-            total_confidence += target.confidence;
-        }
+        float total_confidence = std::accumulate(targets.begin(), targets.end(), 0.0f,
+            [](float sum, const auto& target_pair) {
+                return sum + target_pair.second.confidence;
+            });
         
         return total_confidence / targets.size();
     }
